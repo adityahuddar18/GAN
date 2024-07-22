@@ -1,0 +1,44 @@
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.models import load_model
+from tensorflow.keras.applications.vgg16 import VGG16, preprocess_input
+from tensorflow.keras.preprocessing import image
+import gradio as gr
+
+# Load the pretrained VGG16 model without the top layer for feature extraction
+vgg_model = VGG16(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+
+# Load your trained classifier model
+classifier_model = load_model('/content/drive/MyDrive/vgg16_feature_based_model.h5')
+
+def extract_vgg16_features(img):
+    # Preprocess the image
+    img = img.resize((224, 224))
+    img_array = image.img_to_array(img)
+    img_array = np.expand_dims(img_array, axis=0)
+    img_array = preprocess_input(img_array)
+    
+    # Extract features using VGG16
+    features = vgg_model.predict(img_array)
+    features = features.flatten().reshape(1, -1)
+    return features
+
+def classify_image(img):
+    # Extract features from the uploaded image
+    features = extract_vgg16_features(img)
+    
+    # Predict using the classifier model
+    prediction = classifier_model.predict(features)
+    return 'real' if prediction[0] > 0.5 else 'fake'
+
+# Create Gradio interface
+interface = gr.Interface(
+    fn=classify_image,
+    inputs=gr.Image(type="pil"),
+    outputs="text",
+    title="Real vs Fake Image Classifier",
+    description="Upload an image to classify it as real or fake."
+)
+
+# Launch the interface
+interface.launch()
