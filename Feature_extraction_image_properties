@@ -1,0 +1,109 @@
+## This is the code for feature extraction of an image for classifing the images real or fake.
+## It contains all the properties like pixel_intensity,  resolution, contrast, sharpness, hist_mean, lbp, edges, Noise
+
+import cv2
+import numpy as np
+import pandas as pd
+import glob  # Import glob module
+from skimage.feature import local_binary_pattern
+from skimage import filters
+
+def extract_features(image):
+    # Convert to grayscale
+    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # Pixel Intensity and Color
+    pixel_intensity_mean = np.mean(gray_image)
+    pixel_intensity_std = np.std(gray_image)
+    color_hist = [np.mean(image[:, :, i]) for i in range(3)]  # Mean color values
+
+    # Resolution
+    resolution = image.shape[:2]  # (height, width)
+    
+    # Contrast and Brightness
+    contrast = np.max(gray_image) - np.min(gray_image)
+    brightness = np.mean(gray_image)
+
+    # Sharpness
+    sharpness = filters.laplace(gray_image).var()
+
+    # Histogram
+    hist, _ = np.histogram(gray_image.ravel(), bins=256, range=(0, 256))
+    hist_mean = np.mean(hist)
+    hist_std = np.std(hist)
+
+    # Texture (LBP)
+    lbp = local_binary_pattern(gray_image, P=8, R=1, method='uniform')
+    lbp_hist, _ = np.histogram(lbp, bins=np.arange(0, 59), density=True)
+    
+    # Edges
+    edges = cv2.Canny(gray_image, 100, 200)
+    edge_density = np.sum(edges) / edges.size
+
+    # Spatial Frequency
+    freq = np.fft.fft2(gray_image)
+    freq = np.fft.fftshift(freq)
+    spatial_frequency = np.mean(np.abs(freq))
+
+    # Noise
+    blurred = cv2.GaussianBlur(gray_image, (5, 5), 0)
+    noise = np.var(gray_image - blurred)
+
+    # Compression Artifacts
+    compression_image = cv2.imencode('.jpg', image)[1]
+    compression_artifacts = np.mean(np.abs(image - cv2.imdecode(compression_image, 1)))
+
+    return [
+        pixel_intensity_mean, pixel_intensity_std,
+        color_hist[0], color_hist[1], color_hist[2],
+        resolution[0], resolution[1],
+        contrast, brightness,
+        sharpness,
+        hist_mean, hist_std,
+        *lbp_hist,
+        edge_density,
+        spatial_frequency,
+        noise,
+        compression_artifacts
+    ]
+
+def process_images(image_dir, label):
+    data = []
+    labels = []
+
+    for image_file in glob.glob(f'{image_dir}/*.jpg'):
+        image = cv2.imread(image_file)
+        features = extract_features(image)
+        data.append(features)
+        labels.append(label)
+
+    return data, labels
+
+# Update paths as needed
+real_data, real_labels = process_images('/content/drive/MyDrive/Train/Original_photos', 'real')
+fake_data, fake_labels = process_images('/content/drive/MyDrive/Train/PoPMob', 'fake')
+
+# Combine real and fake data
+all_data = real_data + fake_data
+all_labels = real_labels + fake_labels
+
+# Convert to DataFrame
+df = pd.DataFrame(all_data, columns=[
+    'Pixel_Intensity_Mean', 'Pixel_Intensity_Std',
+    'Color_Mean_R', 'Color_Mean_G', 'Color_Mean_B',
+    'Resolution_Height', 'Resolution_Width',
+    'Contrast', 'Brightness',
+    'Sharpness',
+    'Hist_Mean', 'Hist_Std',
+    *[f'LBP_{i}' for i in range(58)],
+    'Edge_Density',
+    'Spatial_Frequency',
+    'Noise',
+    'Compression_Artifacts'
+])
+df['label'] = all_labels
+
+# Save to CSV
+df.to_csv('features.csv', index=False)
+
+print(df.head())  # Print the first few rows
