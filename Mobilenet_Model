@@ -1,0 +1,103 @@
+import cv2
+import tensorflow as tf
+from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout, BatchNormalization
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+import matplotlib.pyplot as plt
+import os
+import numpy as np
+from sklearn.model_selection import train_test_split
+from tensorflow.keras.regularizers import l2
+
+model.add(Dense(64, activation='relu', kernel_regularizer=l2(0.01)))
+model.add(Dropout(0.5))
+# Set random seed for reproducibility
+tf.random.set_seed(42)
+np.random.seed(42)
+
+# Define parameters
+IMG_SIZE = (224, 224)
+BATCH_SIZE = 32
+EPOCHS = 10
+VALIDATION_SPLIT = 0.2
+
+# Define path to your dataset
+data_dir = '/content/drive/MyDrive/blur_vs_sharp'
+
+# Function to load and preprocess images
+def load_and_preprocess_image(path):
+    image = tf.io.read_file(path)
+    image = tf.image.decode_jpeg(image, channels=3)
+    image = tf.image.resize(image, IMG_SIZE)
+    image = image / 255.0  # Normalize to [0,1]
+    return image
+
+# Load image paths and labels
+image_paths = []
+labels = []
+for class_name in ['blur', 'sharp']:
+    class_dir = os.path.join(data_dir, class_name)
+    for img_name in os.listdir(class_dir):
+        image_paths.append(os.path.join(class_dir, img_name))
+        labels.append(1 if class_name == 'sharp' else 0)
+
+# Split the data into training and validation sets
+train_paths, val_paths, train_labels, val_labels = train_test_split(
+    image_paths, labels, test_size=VALIDATION_SPLIT, random_state=42)
+
+# Create TensorFlow datasets
+train_ds = tf.data.Dataset.from_tensor_slices((train_paths, train_labels))
+train_ds = train_ds.map(lambda x, y: (load_and_preprocess_image(x), y))
+train_ds = train_ds.shuffle(buffer_size=len(train_paths)).batch(BATCH_SIZE)
+
+val_ds = tf.data.Dataset.from_tensor_slices((val_paths, val_labels))
+val_ds = val_ds.map(lambda x, y: (load_and_preprocess_image(x), y))
+val_ds = val_ds.batch(BATCH_SIZE)
+
+# Load pre-trained MobileNetV2 model
+base_model = MobileNetV2(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+
+# Freeze the base model layers
+for layer in base_model.layers:
+    layer.trainable = False
+
+# Add custom layers
+x = base_model.output
+x = GlobalAveragePooling2D()(x)
+x = Dense(256, activation='relu', kernel_regularizer=l2(0.001))(x)
+x = BatchNormalization()(x)
+x = Dropout(0.5)(x)
+output = Dense(1, activation='sigmoid')(x)
+
+# Create the final model
+model = Model(inputs=base_model.input, outputs=output)
+
+# Compile the model
+model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
+              loss='binary_crossentropy',
+              metrics=['accuracy'])
+
+# Define a learning rate scheduler
+def scheduler(epoch, lr):
+    return lr * 0.1 if epoch > 10 else lr
+
+lr_schedule = tf.keras.callbacks.LearningRateScheduler(scheduler)
+
+# Early stopping callback
+early_stopping = tf.keras.callbacks.EarlyStopping(
+    monitor='val_loss',
+    patience=3,
+    restore_best_weights=True
+)
+
+# Train the model
+history = model.fit(
+    train_ds,
+    epochs=EPOCHS,
+    validation_data=val_ds,
+    callbacks=[lr_schedule, early_stopping]
+)
+
+# Save the model
+model.save('blur_sharp_classifier_mobilenet.h5')
