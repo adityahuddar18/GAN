@@ -1,0 +1,49 @@
+import numpy as np
+import keras_nlp
+import tensorflow as tf
+import tensorflow_datasets as tfds
+import tensorflow_text as tf_text
+from tensorflow import keras
+from tensorflow.lite.python import interpreter
+import time
+
+gpt2_tokenizer = keras_nlp.models.GPT2Tokenizer.from_preset("gpt2_base_en")
+gpt2_preprocessor = keras_nlp.models.GPT2CausalLMPreprocessor.from_preset(
+    "gpt2_base_en",
+    sequence_length=256,
+    add_end_token=True,
+)
+gpt2_lm = keras_nlp.models.GPT2CausalLM.from_preset("gpt2_base_en", preprocessor=gpt2_preprocessor)
+
+
+start = time.time()
+
+output = gpt2_lm.generate("My trip to Yosemite was", max_length=200)
+print("\nGPT-2 output:")
+print(output.numpy().decode("utf-8"))
+
+end = time.time()
+print("TOTAL TIME ELAPSED: ", end - start)
+
+
+start = time.time()
+
+output = gpt2_lm.generate("That Italian restaurant is", max_length=200)
+print("\nGPT-2 output:")
+print(output.numpy().decode("utf-8"))
+
+end = time.time()
+print("TOTAL TIME ELAPSED: ", end - start)
+
+
+##output
+
+GPT-2 output:
+That Italian restaurant is known for its delicious food, but there are also many other restaurants in Rome, such as the famous Italian restaurant La Paz in the city's central district (which also has many Italian restaurants in it, like the famous Italian restaurant La Paz in the city's central district) and a popular Italian restaurant in Rome's central district (which also has many Italian restaurants in it, like the famous Italian restaurant La Paz in the city's central district).
+
+In Italy, restaurants are known for their high prices, and there are also some restaurants in Italy that have a low prices. However, there are some restaurants in Italy that are very expensive.
+
+In Italy, the prices of Italian food can be quite expensive, and some restaurants are quite expensive. For example, some of the most expensive Italian food are the dishes that are served at many famous restaurants in Italy.
+
+The prices in Italy vary from restaurant to restaurant, and the prices can vary depending on the
+TOTAL TIME ELAPSED:  35.88505721092224
