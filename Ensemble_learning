@@ -1,0 +1,61 @@
+# In case we want to use saved weights 
+
+# model_vgg19_bn = models.vgg19_bn(pretrained = False)
+# model_vgg19_bn.classifier[6] = torch.nn.Linear(in_features=4096, out_features=200)
+
+# model_resnet152 = models.resnet152(pretrained = False)
+# model_resnet152.fc = torch.nn.Linear(in_features=2048, out_features=200)
+
+# model_densenet161 = models.densenet161(pretrained = False)
+# model_densenet161.classifier = torch.nn.Linear(in_features=2208, out_features=200)
+
+# model_vgg19_bn.load_state_dict(torch.load('VGG19_bn_weights.pth'))
+# model_resnet152.load_state_dict(torch.load('ResNet152_weights.pth'))
+# model_densenet161.load_state_dict(torch.load('DenseNet161_weights.pth'))
+class EnsembleModel(nn.Module):   
+    def __init__(self, modelA, modelB, modelC):
+        super().__init__()
+        self.modelA = modelA
+        self.modelB = modelB
+        self.modelC = modelC
+        self.classifier = nn.Linear(200 * 3, 200)
+        
+    def forward(self, x):
+        x1 = self.modelA(x)
+        x2 = self.modelB(x)
+        x3 = self.modelC(x)
+        x = torch.cat((x1, x2, x3), dim=1)
+        out = self.classifier(x)
+        return out
+    
+ensemble_model = EnsembleModel(model_densenet161, model_resnet152, model_vgg19_bn)
+
+for param in ensemble_model.parameters():
+    param.requires_grad = False
+
+for param in ensemble_model.classifier.parameters():
+    param.requires_grad = True    
+
+ensemble_model = ensemble_model.to(DEVICE)
+ensemble_training_results = training(model=ensemble_model,
+                                     model_name='Ensemble',
+                                     num_epochs=20,
+                                     train_dataloader=train_dataloader,
+                                     val_dataloader=val_dataloader)
+
+ensemble_model, train_loss_array, train_acc_array, val_loss_array, val_acc_array = ensemble_training_results
+
+min_loss = min(val_loss_array)
+min_loss_iteration = val_loss_array.index(min_loss)
+min_loss_accuracy = val_acc_array[min_loss_iteration]
+
+visualize_training_results(train_loss_array,
+                           val_loss_array,
+                           train_acc_array,
+                           val_acc_array,
+                           num_epochs=20,
+                           model_name="Ensemble model",
+                           batch_size=64)
+print("\nTraining results:")
+print("\tMin val loss {:.4f} was achieved during iteration #{}".format(min_loss, min_loss_iteration + 1))
+print("\tVal accuracy during min val loss is {:.4f}".format(min_loss_accuracy))
