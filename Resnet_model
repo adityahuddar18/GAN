@@ -1,0 +1,46 @@
+import tensorflow as tf
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras import layers, models
+from tensorflow.keras.applications import ResNet50
+
+# Define input shape and number of classes
+input_shape = (224, 224, 3)
+num_classes = 1
+
+# Load and preprocess data
+datagen = ImageDataGenerator(rescale=1./255)
+
+train_generator = datagen.flow_from_directory(
+    '/content/drive/MyDrive/blur_vs_sharp',  # Replace with your dataset path
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='binary'
+)
+
+# Define ResNet model
+resnet_model = ResNet50(
+    input_shape=input_shape,
+    include_top=False,
+    weights='imagenet'
+)
+
+# Add custom layers
+x = resnet_model.output
+x = layers.GlobalAveragePooling2D()(x)
+x = layers.Dense(1024, activation='relu')(x)
+x = layers.Dropout(0.5)(x)
+predictions = layers.Dense(num_classes, activation='sigmoid')(x)
+
+model = models.Model(inputs=resnet_model.input, outputs=predictions)
+
+# Compile the model
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+# Train the model
+history = model.fit(
+    train_generator,
+    epochs=10
+)
+
+# Save the model
+model.save('resnet_blur_vs_clear.h5')
